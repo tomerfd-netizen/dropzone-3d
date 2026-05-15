@@ -1,0 +1,13 @@
+{
+  "name": "dropzone-3d",
+  "version": "1.0.0",
+  "description": "First-person 3D bubble shooter",
+  "scripts": {
+    "dev:backend": "node backend/server.js",
+    "dev:frontend": "cd frontend && npx vite --port 5175",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

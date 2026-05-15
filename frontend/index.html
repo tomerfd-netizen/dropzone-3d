@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dropzone 3D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a1a;
+      overflow: hidden;
+      font-family: 'Orbitron', monospace;
+      color: #fff;
+      user-select: none;
+    }
+
+    #game-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+    }
+
+    #game-canvas canvas { display: block; }
+
+    /* ── HUD ── */
+    #hud {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    #score-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 20px;
+      background: rgba(0,0,0,0.55);
+      border-bottom: 1px solid rgba(0,200,255,0.25);
+      backdrop-filter: blur(8px);
+      pointer-events: all;
+    }
+
+    .score-block { text-align: center; min-width: 110px; }
+    .score-label { font-size: 9px; color: rgba(0,200,255,0.65); letter-spacing: 2px; margin-bottom: 2px; }
+    .score-value { font-size: 20px; font-weight: 700; color: #fff; text-shadow: 0 0 8px rgba(0,200,255,0.4); }
+
+    #leaderboard-btn {
+      background: rgba(0,200,255,0.12);
+      border: 1px solid rgba(0,200,255,0.35);
+      color: #00c8ff;
+      font-family: 'Orbitron', monospace;
+      font-size: 9px;
+      letter-spacing: 2px;
+      padding: 7px 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    #leaderboard-btn:hover { background: rgba(0,200,255,0.28); box-shadow: 0 0 12px rgba(0,200,255,0.35); }
+
+    /* ── Bubble indicators (NOW + NEXT) ── */
+    #bubble-indicators {
+      display: none;
+      position: fixed;
+      bottom: 22px; left: 22px;
+      z-index: 10;
+      flex-direction: row;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .bubble-indicator {
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(0,200,255,0.25);
+      padding: 10px 14px;
+      backdrop-filter: blur(8px);
+    }
+    .bubble-indicator-label { font-size: 8px; color: rgba(0,200,255,0.6); letter-spacing: 2px; margin-bottom: 7px; }
+    .bubble-indicator-preview {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      margin: 0 auto;
+    }
+
+    /* ── Mini celebration text ── */
+    #mini-text {
+      position: fixed;
+      bottom: 140px; right: 24px;
+      z-index: 20;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: rgba(0,200,255,0.9);
+      text-shadow: 0 0 10px rgba(0,200,255,0.7), 0 0 22px rgba(0,200,255,0.35);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+    #mini-text.visible { opacity: 1; }
+
+    /* ── Crosshair ── */
+    #crosshair {
+      display: none;
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 18px; height: 18px;
+      z-index: 10;
+      pointer-events: none;
+    }
+    #crosshair::before, #crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(255,255,255,0.65);
+    }
+    #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
+    #crosshair::after  { width: 100%; height: 2px; top: 50%; transform: translateY(-50%); }
+
+    /* ── Auth screen ── */
+    #auth-screen {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 100;
+      background: rgba(10,10,26,0.97);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #auth-title {
+      font-size: 48px; font-weight: 900; letter-spacing: 6px;
+      color: #fff;
+      text-shadow: 0 0 28px rgba(0,200,255,0.85), 0 0 60px rgba(0,200,255,0.35);
+      margin-bottom: 6px;
+    }
+    #auth-subtitle {
+      font-size: 10px; letter-spacing: 4px;
+      color: rgba(0,200,255,0.65);
+      margin-bottom: 38px;
+    }
+
+    .auth-tabs { display: flex; margin-bottom: 22px; border-bottom: 1px solid rgba(0,200,255,0.18); }
+    .auth-tab {
+      padding: 9px 28px;
+      font-family: 'Orbitron', monospace; font-size: 10px; letter-spacing: 2px;
+      cursor: pointer; background: none; border: none;
+      color: rgba(255,255,255,0.35);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: all 0.18s;
+    }
+    .auth-tab.active { color: #00c8ff; border-bottom-color: #00c8ff; text-shadow: 0 0 8px rgba(0,200,255,0.5); }
+
+    .auth-form { display: none; flex-direction: column; gap: 12px; width: 300px; }
+    .auth-form.active { display: flex; }
+
+    .auth-input {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(0,200,255,0.28);
+      color: #fff;
+      font-family: 'Orbitron', monospace; font-size: 11px;
+      padding: 11px 15px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .auth-input:focus { border-color: rgba(0,200,255,0.65); box-shadow: 0 0 10px rgba(0,200,255,0.18); }
+    .auth-input::placeholder { color: rgba(255,255,255,0.28); }
+
+    .auth-btn {
+      background: rgba(0,200,255,0.12);
+      border: 1px solid rgba(0,200,255,0.45);
+      color: #00c8ff;
+      font-family: 'Orbitron', monospace; font-size: 11px; letter-spacing: 3px;
+      padding: 12px;
+      cursor: pointer; transition: all 0.2s; text-transform: uppercase;
+    }
+    .auth-btn:hover { background: rgba(0,200,255,0.28); box-shadow: 0 0 18px rgba(0,200,255,0.35); }
+
+    .auth-error { color: #ff4444; font-size: 9px; letter-spacing: 1px; min-height: 15px; text-align: center; }
+
+    #guest-btn {
+      margin-top: 14px;
+      background: none;
+      border: 1px solid rgba(255,255,255,0.13);
+      color: rgba(255,255,255,0.38);
+      font-family: 'Orbitron', monospace; font-size: 9px; letter-spacing: 2px;
+      padding: 9px 28px; cursor: pointer; transition: all 0.2s;
+    }
+    #guest-btn:hover { border-color: rgba(255,255,255,0.28); color: rgba(255,255,255,0.65); }
+
+    /* ── Leaderboard panel ── */
+    #leaderboard-panel {
+      position: fixed; top: 0; right: -380px;
+      width: 340px; height: 100%;
+      background: rgba(8,8,24,0.96);
+      border-left: 1px solid rgba(0,200,255,0.18);
+      z-index: 50;
+      padding: 18px;
+      transition: right 0.38s cubic-bezier(0.25,0.46,0.45,0.94);
+      backdrop-filter: blur(18px);
+      overflow-y: auto;
+    }
+    #leaderboard-panel.open { right: 0; }
+
+    #leaderboard-header {
+      font-size: 16px; font-weight: 700; letter-spacing: 4px;
+      color: #00c8ff;
+      text-shadow: 0 0 12px rgba(0,200,255,0.45);
+      margin-bottom: 18px; padding-bottom: 10px;
+      border-bottom: 1px solid rgba(0,200,255,0.18);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    #leaderboard-close {
+      background: none; border: none; color: rgba(255,255,255,0.45);
+      font-size: 18px; cursor: pointer; line-height: 1;
+    }
+    #leaderboard-close:hover { color: #fff; }
+
+    .lb-entry {
+      display: flex; align-items: center;
+      padding: 9px 6px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      gap: 10px;
+    }
+    .lb-rank { font-size: 13px; font-weight: 700; color: rgba(0,200,255,0.55); width: 26px; text-align: center; }
+    .lb-rank.gold { color: #ffd700; text-shadow: 0 0 6px rgba(255,215,0,0.5); }
+    .lb-rank.silver { color: #c0c0c0; }
+    .lb-rank.bronze { color: #cd7f32; }
+    .lb-username { flex: 1; font-size: 10px; letter-spacing: 1px; color: #fff; }
+    .lb-info { text-align: right; }
+    .lb-score { font-size: 12px; font-weight: 700; color: #00c8ff; }
+    .lb-level { font-size: 8px; color: rgba(255,255,255,0.38); letter-spacing: 1px; }
+
+    /* ── Game Over ── */
+    #game-over {
+      display: none;
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 80;
+      background: rgba(0,0,0,0.82);
+      flex-direction: column; align-items: center; justify-content: center;
+      backdrop-filter: blur(10px);
+    }
+    #game-over.visible { display: flex; }
+
+    #go-title {
+      font-size: 58px; font-weight: 900; letter-spacing: 7px; color: #ff3333;
+      text-shadow: 0 0 28px rgba(255,50,50,0.8), 0 0 60px rgba(255,50,50,0.35);
+      margin-bottom: 10px;
+      animation: pulseRed 1.4s ease-in-out infinite;
+    }
+    @keyframes pulseRed {
+      0%, 100% { text-shadow: 0 0 28px rgba(255,50,50,0.8), 0 0 60px rgba(255,50,50,0.35); }
+      50% { text-shadow: 0 0 50px rgba(255,50,50,1), 0 0 100px rgba(255,50,50,0.55); }
+    }
+
+    #go-score { font-size: 16px; color: rgba(255,255,255,0.75); margin-bottom: 6px; letter-spacing: 2px; }
+    #go-level { font-size: 13px; color: rgba(0,200,255,0.65); letter-spacing: 2px; margin-bottom: 6px; }
+    #go-saved { font-size: 10px; color: #00ff88; letter-spacing: 2px; margin-bottom: 28px; min-height: 16px; }
+
+    .go-btn {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: #fff;
+      font-family: 'Orbitron', monospace; font-size: 10px; letter-spacing: 3px;
+      padding: 11px 26px; cursor: pointer; margin: 5px; transition: all 0.2s;
+    }
+    .go-btn:hover { background: rgba(255,255,255,0.13); border-color: rgba(255,255,255,0.35); }
+    .go-btn.primary {
+      border-color: rgba(0,200,255,0.45); color: #00c8ff; background: rgba(0,200,255,0.08);
+    }
+    .go-btn.primary:hover { background: rgba(0,200,255,0.22); box-shadow: 0 0 18px rgba(0,200,255,0.28); }
+
+    /* ── Speech bubble ── */
+    #speech-bubble {
+      display: none;
+      position: fixed;
+      bottom: 190px; right: 70px;
+      z-index: 20;
+      background: #ffffff;
+      color: #1a1a3a;
+      font-size: 20px; font-weight: 900; letter-spacing: 3px;
+      padding: 12px 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 28px rgba(255,255,255,0.35);
+      pointer-events: none;
+    }
+    #speech-bubble::after {
+      content: '';
+      position: absolute;
+      bottom: -13px; right: 22px;
+      width: 0; height: 0;
+      border-left: 11px solid transparent;
+      border-right: 11px solid transparent;
+      border-top: 13px solid #fff;
+    }
+    #speech-bubble.visible {
+      display: block;
+      animation: popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    }
+    #speech-bubble.hiding {
+      animation: fadeUp 0.45s ease-in forwards;
+    }
+    @keyframes popIn {
+      from { transform: scale(0.25) rotate(-8deg); opacity: 0; }
+      to   { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+    @keyframes fadeUp {
+      from { opacity: 1; transform: scale(1) translateY(0); }
+      to   { opacity: 0; transform: scale(0.85) translateY(-18px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-canvas"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="score-bar">
+      <div class="score-block">
+        <div class="score-label">Score</div>
+        <div class="score-value" id="score-display">0</div>
+      </div>
+      <div class="score-block">
+        <div class="score-label">Level</div>
+        <div class="score-value" id="level-display">1</div>
+      </div>
+      <div class="score-block">
+        <div class="score-label">Best</div>
+        <div class="score-value" id="best-display">0</div>
+      </div>
+      <button id="leaderboard-btn">RANKINGS</button>
+    </div>
+  </div>
+
+  <!-- NOW / NEXT bubble indicators -->
+  <div id="bubble-indicators">
+    <div class="bubble-indicator" id="current-bubble-container">
+      <div class="bubble-indicator-label">NOW</div>
+      <div class="bubble-indicator-preview" id="current-bubble-preview"></div>
+    </div>
+    <div class="bubble-indicator" id="next-bubble-container">
+      <div class="bubble-indicator-label">NEXT</div>
+      <div class="bubble-indicator-preview" id="next-bubble-preview"></div>
+    </div>
+  </div>
+
+  <!-- Mini celebration text -->
+  <div id="mini-text"></div>
+
+  <!-- Crosshair -->
+  <div id="crosshair"></div>
+
+  <!-- Speech bubble -->
+  <div id="speech-bubble"></div>
+
+  <!-- Auth screen -->
+  <div id="auth-screen">
+    <div id="auth-title">DROPZONE 3D</div>
+    <div id="auth-subtitle">FIRST PERSON BUBBLE SHOOTER</div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-tab="login">LOGIN</button>
+      <button class="auth-tab" data-tab="register">REGISTER</button>
+    </div>
+
+    <form class="auth-form active" id="login-form">
+      <input class="auth-input" type="text" id="login-username" placeholder="USERNAME" autocomplete="off" spellcheck="false">
+      <input class="auth-input" type="password" id="login-password" placeholder="PASSWORD">
+      <div class="auth-error" id="login-error"></div>
+      <button class="auth-btn" type="submit">ENTER DROPZONE</button>
+    </form>
+
+    <form class="auth-form" id="register-form">
+      <input class="auth-input" type="text" id="reg-username" placeholder="USERNAME" autocomplete="off" spellcheck="false">
+      <input class="auth-input" type="password" id="reg-password" placeholder="PASSWORD">
+      <input class="auth-input" type="password" id="reg-confirm" placeholder="CONFIRM PASSWORD">
+      <div class="auth-error" id="register-error"></div>
+      <button class="auth-btn" type="submit">CREATE ACCOUNT</button>
+    </form>
+
+    <button id="guest-btn">PLAY AS GUEST</button>
+  </div>
+
+  <!-- Leaderboard panel -->
+  <div id="leaderboard-panel">
+    <div id="leaderboard-header">
+      <span>RANKINGS</span>
+      <button id="leaderboard-close">✕</button>
+    </div>
+    <div id="leaderboard-list"></div>
+  </div>
+
+  <!-- Game Over -->
+  <div id="game-over">
+    <div id="go-title">GAME OVER</div>
+    <div id="go-score">SCORE: <span id="go-score-val">0</span></div>
+    <div id="go-level">LEVEL: <span id="go-level-val">1</span></div>
+    <div id="go-saved"></div>
+    <div>
+      <button class="go-btn primary" id="play-again-btn">PLAY AGAIN</button>
+      <button class="go-btn" id="go-lb-btn">LEADERBOARD</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/game.js"></script>
+</body>
+</html>
