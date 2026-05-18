@@ -1,18 +1,21 @@
 import { TOTAL_LEVELS } from './levels.js';
 
-const API = 'http://localhost:4001/api';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:4001/api';
 
 export class UI {
   constructor(game) {
     this.game = game;
-    this.leaderboardOpen = false;
-    this.levelsOpen      = false;
+    this.leaderboardOpen    = false;
+    this.levelsOpen         = false;
+    this._returnToHome      = false;
+    this._returnToMainMenu  = false;
     this._setupTabs();
     this._setupForms();
     this._setupLeaderboard();
     this._setupLevels();
     this._setupLevelComplete();
     this._setupGameOver();
+    this._setupHomeScreen();
   }
 
   // ── Tabs ──────────────────────────────────────────────────
@@ -69,11 +72,143 @@ export class UI {
     });
   }
 
-  /** Called after login / register / guest — show levels panel. */
+  /** Called after login / register / guest — show main menu. */
   _afterAuth() {
     document.getElementById('hud').style.display = 'block';
     this.renderLevelMap();
-    this.showLevels();
+    this.game.mainMenu.show();
+  }
+
+  // ── Home Screen ───────────────────────────────────────────
+  _setupHomeScreen() {
+    document.getElementById('home-hud-btn').addEventListener('click', () => {
+      this.game.freePlayMode = false;
+      this.game.isPlaying    = false;
+      this.game.audio.stopMusic();
+      this._hideGameplayUI();
+      this.resetLevelLabel();
+      this.game.mainMenu.show();
+    });
+
+    document.getElementById('home-play-btn').addEventListener('click', () => {
+      this.game.audio.resume();
+      this.hideHomeScreen();
+      this._fadeToLevel(this.game.nextUnlockedLevel());
+    });
+
+    document.getElementById('home-levels-btn').addEventListener('click', () => {
+      this._returnToHome = true;
+      this.hideHomeScreen();
+      this.showLevels();
+    });
+
+    document.getElementById('home-how-btn').addEventListener('click', () => {
+      this.showInstructions();
+    });
+
+    document.getElementById('home-settings-btn').addEventListener('click', () => {
+      this.showSettings();
+    });
+
+    document.getElementById('instructions-close').addEventListener('click', () => this.hideInstructions());
+    document.getElementById('instructions-modal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) this.hideInstructions();
+    });
+
+    document.getElementById('settings-close').addEventListener('click', () => this.hideSettings());
+    document.getElementById('settings-modal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) this.hideSettings();
+    });
+
+    document.getElementById('home-logout-btn').addEventListener('click', () => {
+      this.hideSettings();
+      this.hideHomeScreen();
+      this.game.setAuth(null, null);
+      this._hideGameplayUI();
+      this.hideHUD();
+      this.showAuth();
+    });
+
+    const musicToggle = document.getElementById('music-toggle');
+    const sfxToggle   = document.getElementById('sfx-toggle');
+
+    const musicOn = localStorage.getItem('dz3d_music') !== 'off';
+    const sfxOn   = localStorage.getItem('dz3d_sfx')   !== 'off';
+    this._updateToggle(musicToggle, musicOn);
+    this._updateToggle(sfxToggle, sfxOn);
+    this.game.audio.setMusicEnabled(musicOn);
+    this.game.audio.setSFXEnabled(sfxOn);
+
+    musicToggle.addEventListener('click', () => {
+      const nowOn = musicToggle.classList.contains('off');
+      localStorage.setItem('dz3d_music', nowOn ? 'on' : 'off');
+      this._updateToggle(musicToggle, nowOn);
+      this.game.audio.setMusicEnabled(nowOn);
+    });
+
+    sfxToggle.addEventListener('click', () => {
+      const nowOn = sfxToggle.classList.contains('off');
+      localStorage.setItem('dz3d_sfx', nowOn ? 'on' : 'off');
+      this._updateToggle(sfxToggle, nowOn);
+      this.game.audio.setSFXEnabled(nowOn);
+    });
+  }
+
+  _updateToggle(btn, isOn) {
+    btn.textContent = isOn ? 'ON' : 'OFF';
+    btn.classList.toggle('off', !isOn);
+  }
+
+  showHomeScreen() {
+    const nextLvl   = this.game.nextUnlockedLevel();
+    const completed = this.game.levelProgress.filter(Boolean).length;
+    const total     = this.game.levelProgress.length;
+    const name      = this.game.username;
+
+    document.getElementById('home-player-name').textContent =
+      name ? `WELCOME BACK, ${name.toUpperCase()}` : 'PLAYING AS GUEST';
+    document.getElementById('home-level-info').textContent =
+      `${completed} OF ${total} LEVELS COMPLETE`;
+    document.getElementById('home-progress-bar').style.width =
+      `${Math.round((completed / total) * 100)}%`;
+
+    const playBtn = document.getElementById('home-play-btn');
+    if (completed >= total)  playBtn.textContent = '▶ PLAY AGAIN';
+    else if (completed === 0) playBtn.textContent = '▶ START PLAYING';
+    else                      playBtn.textContent = `▶ CONTINUE — LEVEL ${nextLvl}`;
+
+    document.getElementById('home-screen').style.display = 'flex';
+  }
+
+  hideHomeScreen() { document.getElementById('home-screen').style.display = 'none'; }
+
+  // ── Instructions ──────────────────────────────────────────
+  showInstructions() { document.getElementById('instructions-modal').style.display = 'flex'; }
+  hideInstructions() { document.getElementById('instructions-modal').style.display = 'none'; }
+
+  // ── Settings ──────────────────────────────────────────────
+  showSettings() { document.getElementById('settings-modal').style.display = 'flex'; }
+  hideSettings() { document.getElementById('settings-modal').style.display = 'none'; }
+
+  // ── Free Play HUD helpers ─────────────────────────────────
+  showFreePlayHUD(score, wave, best) {
+    document.querySelectorAll('.score-label')[1].textContent = 'WAVE';
+    document.getElementById('score-display').textContent = score.toLocaleString();
+    document.getElementById('level-display').textContent = wave;
+    document.getElementById('best-display').textContent  = best.toLocaleString();
+  }
+
+  resetLevelLabel() {
+    document.querySelectorAll('.score-label')[1].textContent = 'LEVEL';
+  }
+
+  showFreePlayWaveClear(wave) {
+    const el = document.getElementById('fp-wave-clear');
+    document.getElementById('fp-wc-num').textContent = `WAVE ${wave}`;
+    el.style.display = 'flex';
+    // Reset animation by re-inserting children
+    el.querySelectorAll('div').forEach(d => { d.style.animation = 'none'; void d.offsetWidth; d.style.animation = ''; });
+    setTimeout(() => { el.style.display = 'none'; }, 2400);
   }
 
   // ── Leaderboard ───────────────────────────────────────────
@@ -135,6 +270,13 @@ export class UI {
   hideLevels() {
     document.getElementById('levels-panel').classList.remove('open');
     this.levelsOpen = false;
+    if (this._returnToMainMenu) {
+      this._returnToMainMenu = false;
+      this.game.mainMenu.show();
+    } else if (this._returnToHome) {
+      this._returnToHome = false;
+      this.showHomeScreen();
+    }
   }
 
   renderLevelMap() {
@@ -182,6 +324,9 @@ export class UI {
 
         if (unlocked) {
           tile.addEventListener('click', () => {
+            this._returnToHome     = false;
+            this._returnToMainMenu = false;
+            this.game.freePlayMode = false;
             this.hideLevels();
             this._fadeToLevel(n);
           });
@@ -212,12 +357,14 @@ export class UI {
       if (next <= TOTAL_LEVELS) {
         this._fadeToLevel(next);
       } else {
+        this._hideGameplayUI();
         this.renderLevelMap();
         this.showLevels();
       }
     });
     document.getElementById('lc-map-btn').addEventListener('click', () => {
       this.hideLevelComplete();
+      this._hideGameplayUI();
       this.renderLevelMap();
       this.showLevels();
     });
@@ -265,6 +412,7 @@ export class UI {
     });
     document.getElementById('go-map-btn').addEventListener('click', () => {
       this.hideGameOver();
+      this._hideGameplayUI();
       this.renderLevelMap();
       this.showLevels();
     });
@@ -283,11 +431,20 @@ export class UI {
   showAuth()  { document.getElementById('auth-screen').style.display = 'flex'; }
 
   // ── HUD ───────────────────────────────────────────────────
+  _hideGameplayUI() {
+    document.getElementById('crosshair').style.display = 'none';
+    document.getElementById('bubble-indicators').style.display = 'none';
+    document.getElementById('bubble-progress-wrap').style.display = 'none';
+    document.getElementById('special-legend').style.display = 'none';
+    document.getElementById('combo-display').style.display = 'none';
+  }
+
   showHUD() {
     document.getElementById('hud').style.display = 'block';
     document.getElementById('bubble-indicators').style.display = 'flex';
     document.getElementById('crosshair').style.display = 'block';
     document.getElementById('bubble-progress-wrap').style.display = 'flex';
+    document.getElementById('special-legend').style.display = 'block';
   }
 
   hideHUD() {
@@ -295,6 +452,8 @@ export class UI {
     document.getElementById('bubble-indicators').style.display = 'none';
     document.getElementById('crosshair').style.display = 'none';
     document.getElementById('bubble-progress-wrap').style.display = 'none';
+    document.getElementById('special-legend').style.display = 'none';
+    document.getElementById('combo-display').style.display = 'none';
   }
 
   updateHUD(score, levelNum, best) {
@@ -314,6 +473,19 @@ export class UI {
     } else {
       bar.style.background = 'linear-gradient(90deg, #00c8ff, #00ff88)';
     }
+  }
+
+  updateCombo(streak, multiplier) {
+    const el = document.getElementById('combo-display');
+    if (streak <= 1) { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    const multEl = document.getElementById('combo-mult');
+    multEl.textContent = multiplier.toFixed(1) + '×';
+    // Retrigger scale-pop animation
+    multEl.classList.remove('pop');
+    void multEl.offsetWidth;
+    multEl.classList.add('pop');
+    document.getElementById('combo-label').textContent = `${streak} COMBO`;
   }
 
   updateCurrentBubble(colorHex) {

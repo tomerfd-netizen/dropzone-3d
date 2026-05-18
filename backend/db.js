@@ -36,7 +36,11 @@ const stmts = {
   getLeaderboardEntry: db.prepare('SELECT * FROM leaderboard WHERE user_id = ?'),
   insertLeaderboard: db.prepare('INSERT INTO leaderboard (user_id, username, score, level) VALUES (?, ?, ?, ?)'),
   updateLeaderboard: db.prepare('UPDATE leaderboard SET score = ?, level = ?, created_at = CURRENT_TIMESTAMP WHERE user_id = ?'),
-  countLeaderboard: db.prepare('SELECT COUNT(*) as count FROM leaderboard'),
+  countLeaderboard:  db.prepare('SELECT COUNT(*) as count FROM leaderboard'),
+  countUsers:        db.prepare('SELECT COUNT(*) as count FROM users'),
+  countGames:        db.prepare('SELECT COUNT(*) as count FROM scores'),
+  getTop5:           db.prepare('SELECT username, score, level FROM leaderboard ORDER BY score DESC LIMIT 5'),
+  getRecentScores:   db.prepare(`SELECT u.username, s.score, s.level, s.created_at as date FROM scores s JOIN users u ON s.user_id = u.id ORDER BY s.created_at DESC LIMIT 10`),
   getMinLeaderboard: db.prepare('SELECT * FROM leaderboard ORDER BY score ASC LIMIT 1'),
   deleteLeaderboardById: db.prepare('DELETE FROM leaderboard WHERE id = ?'),
 };

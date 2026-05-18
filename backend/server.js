@@ -69,4 +69,12 @@ app.get('/api/me/scores', auth, (req, res) => {
   res.json(stmts.getUserScores.all(req.user.id));
 });
 
+app.get('/api/admin/stats', (req, res) => {
+  const { count: totalUsers } = stmts.countUsers.get();
+  const { count: totalGames } = stmts.countGames.get();
+  const top5Scores   = stmts.getTop5.all();
+  const recentScores = stmts.getRecentScores.all();
+  res.json({ totalUsers, totalGames, top5Scores, recentScores });
+});
+
 app.listen(PORT, () => console.log(`Backend running on http://localhost:${PORT}`));
